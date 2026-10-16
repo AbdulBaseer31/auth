@@ -1,16 +1,12 @@
 package tests
 
 import (
+	auth "github.com/GCET-Open-Source-Foundation/auth"
 	"errors"
 	"fmt"
 	"testing"
-
-	auth "github.com/GCET-Open-Source-Foundation/auth"
 )
 
-/*
-TestErrorsAreSentinels verifies that all sentinel errors are distinct and non-nil.
-*/
 func TestErrorsAreSentinels(t *testing.T) {
 	sentinels := []error{
 		auth.ErrNotInitialized,
@@ -47,9 +43,6 @@ func TestErrorsAreSentinels(t *testing.T) {
 	}
 }
 
-/*
-TestErrorWrapping verifies that wrapped errors can be unwrapped to the sentinel.
-*/
 func TestErrorWrapping(t *testing.T) {
 	wrapped := fmt.Errorf("%w: some detail", auth.ErrDatabaseUnavailable)
 

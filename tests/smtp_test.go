@@ -1,6 +1,7 @@
 package tests
 
 import (
+	auth "github.com/GCET-Open-Source-Foundation/auth"
 	"context"
 	"errors"
 	"fmt"
@@ -11,8 +12,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	auth "github.com/GCET-Open-Source-Foundation/auth"
 )
 
 func getBinaryName() string {
@@ -82,21 +81,19 @@ func runMockSMTP(t *testing.T, binary, inputPath, outputPath string, timeout tim
 func TestSMTPMockOTPDelivery(t *testing.T) {
 	skipIfShort(t)
 	binary := findMockBinary(t)
-	a := setupTestAuth(t,
-		auth.WithOTP(6, 5*time.Minute),
-		auth.WithSMTP("127.0.0.1", "2525", "noreply@auth.test", "dummy_pass"),
-	)
-	db := getTestDBPool(t, context.Background())
+	a := setupTestAuth(t)
+	_ = a.OTPInit(6, 5*time.Minute)
+	_ = a.SMTPInit("noreply@auth.test", "dummy_pass", "127.0.0.1", "2525")
 
 	userEmail := "smtptest@example.com"
 
-	err := a.SendOTP(context.Background(), userEmail)
+	err := a.SendOTP(userEmail)
 	if err != nil && !strings.Contains(err.Error(), "failed to send email") {
 		t.Fatalf("unexpected SendOTP failure: %v", err)
 	}
 
 	var otp string
-	err = db.QueryRow(context.Background(), "SELECT code FROM otps WHERE email = $1", userEmail).Scan(&otp)
+	err = a.Conn.QueryRow(context.Background(), "SELECT code FROM otps WHERE email = $1", userEmail).Scan(&otp)
 	if err != nil {
 		t.Fatalf("failed to retrieve generated OTP: %v", err)
 	}
@@ -122,13 +119,9 @@ func TestSMTPMockOTPDelivery(t *testing.T) {
 		t.Errorf("output file does not contain the OTP %q.\nGot: %s", otp, string(output))
 	}
 
-	/*
-		Note: we do not call VerifyOTP here because SendOTP stores an
-		HMAC-SHA256 hash in the database, not the plaintext code.
-		VerifyOTP is tested in isolation in otp_test.go.
-	*/
-	if otp == "" {
-		t.Fatal("retrieved OTP hash is empty — SendOTP did not persist the code")
+	err = a.VerifyOTP(userEmail, otp)
+	if err != nil {
+		t.Errorf("OTP should still be valid in DB after mock delivery: %v", err)
 	}
 }
 
@@ -267,23 +260,21 @@ func TestSMTPMockMalformedOutput(t *testing.T) {
 func TestSMTPMockFullOTPFlow(t *testing.T) {
 	skipIfShort(t)
 	binary := findMockBinary(t)
-	a := setupTestAuth(t,
-		auth.WithOTP(6, 5*time.Minute),
-		auth.WithSMTP("127.0.0.1", "2525", "noreply@auth.test", "dummy_pass"),
-	)
-	db := getTestDBPool(t, context.Background())
+	a := setupTestAuth(t)
+	_ = a.OTPInit(6, 5*time.Minute)
+	_ = a.SMTPInit("noreply@auth.test", "dummy_pass", "127.0.0.1", "2525")
 
 	userEmail := "otpflow@example.com"
 
-	_ = a.RegisterUser(context.Background(), userEmail, "TestP@ssword1!")
+	_ = a.RegisterUser(userEmail, "password123")
 
-	err := a.SendOTP(context.Background(), userEmail)
+	err := a.SendOTP(userEmail)
 	if err != nil && !strings.Contains(err.Error(), "failed to send email") {
 		t.Fatalf("unexpected error from SendOTP: %v", err)
 	}
 
 	var otp string
-	err = db.QueryRow(context.Background(), "SELECT code FROM otps WHERE email = $1", userEmail).Scan(&otp)
+	err = a.Conn.QueryRow(context.Background(), "SELECT code FROM otps WHERE email = $1", userEmail).Scan(&otp)
 	if err != nil {
 		t.Fatalf("failed to fetch generated OTP: %v", err)
 	}
@@ -305,13 +296,13 @@ func TestSMTPMockFullOTPFlow(t *testing.T) {
 		t.Errorf("output missing OTP %q.\nGot: %s", otp, string(output))
 	}
 
-	/*
-		Note: VerifyOTP is not called here because the DB stores the HMAC
-		hash of the code, not the plaintext code. Reading otp from the DB
-		gives the hash; passing it to VerifyOTP would double-hash and fail.
-		End-to-end OTP verification is covered by integration_test.go.
-	*/
-	if otp == "" {
-		t.Fatal("OTP hash from DB is empty — SendOTP did not persist")
+	err = a.VerifyOTP(userEmail, otp)
+	if err != nil {
+		t.Errorf("OTP verification should succeed: %v", err)
+	}
+
+	err = a.VerifyOTP(userEmail, otp)
+	if !errors.Is(err, auth.ErrInvalidOTP) {
+		t.Errorf("expected ErrInvalidOTP on reuse, got: %v", err)
 	}
 }
