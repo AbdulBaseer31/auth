@@ -44,6 +44,7 @@ type StorageEngine interface {
 	/* OTP */
 	InsertOTP(ctx context.Context, email, code string, expiresAt time.Time) error
 	GetOTP(ctx context.Context, email string) (code string, expiresAt time.Time, err error)
+	IncreaseOTPAttempts(ctx context.Context, email string) (int, error)
 	DeleteOTP(ctx context.Context, email string) error
 	ListActiveOTPs(ctx context.Context, limit, offset int) ([]string, error)
 	CleanupExpiredOTPs(ctx context.Context) error
@@ -293,7 +294,7 @@ func (p *PostgresStorage) DeletePermission(ctx context.Context, username, spaceN
 
 /* InsertOTP inserts or updates an OTP. The expiry is stored in UTC. */
 func (p *PostgresStorage) InsertOTP(ctx context.Context, email, code string, expiresAt time.Time) error {
-	_, err := p.pool.Exec(ctx, "INSERT INTO otps (email, code, expires_at) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET code = EXCLUDED.code, expires_at = EXCLUDED.expires_at", email, code, expiresAt.UTC())
+	_, err := p.pool.Exec(ctx, "INSERT INTO otps (email, code, expires_at) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET code = EXCLUDED.code, expires_at = EXCLUDED.expires_at, attempts = 0", email, code, expiresAt.UTC())
 	return err
 }
 
@@ -309,6 +310,23 @@ func (p *PostgresStorage) GetOTP(ctx context.Context, email string) (string, tim
 		return "", time.Time{}, err
 	}
 	return code, expiresAt.UTC(), nil
+}
+
+/* IncreaseOTPAttempts increases the attempts of OTPs entered for rate limiting*/
+func (p *PostgresStorage) IncreaseOTPAttempts(ctx context.Context, email string) (int, error) {
+	var newOTP int
+	attemptcheck := `
+			UPDATE otps
+			SET attempts = attempts + 1
+			WHERE email = $1
+			RETURNING attempts
+	`
+	err := p.pool.QueryRow(ctx, attemptcheck, email).Scan(&newOTP)
+
+	if err != nil {
+		return 0, err
+	}
+	return newOTP, nil
 }
 
 /* DeleteOTP deletes an OTP. */
