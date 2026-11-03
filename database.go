@@ -107,33 +107,34 @@ func (p *PostgresStorage) Close() error {
 func (p *PostgresStorage) CheckTables(ctx context.Context) error {
 	query := `
 		CREATE TABLE IF NOT EXISTS spaces (
-			spaceName TEXT PRIMARY KEY, 
+			spaceName TEXT PRIMARY KEY,
 			authority INTEGER NOT NULL
 		);
 		CREATE TABLE IF NOT EXISTS users (
-			user_id TEXT PRIMARY KEY, 
-			password_hash TEXT NOT NULL, 
+			user_id TEXT PRIMARY KEY,
+			password_hash TEXT NOT NULL,
 			salt TEXT NOT NULL
 		);
 		CREATE TABLE IF NOT EXISTS roles (
 			role TEXT PRIMARY KEY
 		);
 		CREATE TABLE IF NOT EXISTS permissions (
-			user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE, 
-			spaceName TEXT NOT NULL REFERENCES spaces(spaceName) ON DELETE CASCADE, 
-			role TEXT NOT NULL REFERENCES roles(role) ON DELETE CASCADE, 
+			user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+			spaceName TEXT NOT NULL REFERENCES spaces(spaceName) ON DELETE CASCADE,
+			role TEXT NOT NULL REFERENCES roles(role) ON DELETE CASCADE,
 			PRIMARY KEY (user_id, spaceName, role)
 		);
 		CREATE TABLE IF NOT EXISTS otps (
-			email TEXT PRIMARY KEY, 
-			code TEXT NOT NULL, 
-			expires_at TIMESTAMPTZ NOT NULL
+			email TEXT PRIMARY KEY,
+			code TEXT NOT NULL,
+			expires_at TIMESTAMPTZ NOT NULL,
+			attempts INT NOT NULL DEFAULT 0
 		);
 		CREATE TABLE IF NOT EXISTS refresh_tokens (
-			token TEXT PRIMARY KEY, 
-			user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE, 
-			expires_at TIMESTAMPTZ NOT NULL, 
-			revoked BOOLEAN NOT NULL DEFAULT false, 
+			token TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+			expires_at TIMESTAMPTZ NOT NULL,
+			revoked BOOLEAN NOT NULL DEFAULT false,
 			created_at TIMESTAMP NOT NULL DEFAULT NOW()
 		);
 	`
