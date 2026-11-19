@@ -29,4 +29,5 @@ var (
 	ErrRedisUnavailable        = errors.New("redis connection unavailable")
 	ErrRateLimitBackendDown    = errors.New("rate limit backend is down")
 	ErrSchemaOutdated          = errors.New("database schema is outdated")
+	ErrOtpPepperNotInitialized = errors.New("otp pepper not initialized")
 )
